@@ -13,7 +13,7 @@ def get_accelerator_data():
     """
     Récupère les données depuis l'API Gateway et les transforme en JSON utilisable.
     """
-    response = requests.get(ACCELERATOR_URL)
+    response = requests.get(ACCELERATOR_URL, headers={"x-api-key": os.getenv("API_KEY")})
     response.raise_for_status()  # Vérifie si l'API renvoie une erreur
     data = response.json()
     # data = {'statusCode': 200, 'body': '[{"payload": {"acceleration": {"x": -0.24, "y": 0.0, "z": 0.9}, "timestamp": 1742096823.0}, "sensor_id": "MPU6050_1", "timestamp": 1742096823.0}, {"payload": {"acceleration": {"x": -0.25, "y": -0.01, "z": 0.91}, "timestamp": 1742097401.0}, "sensor_id": "MPU6050_1", "timestamp": 1742097401.0}, {"payload": {"acceleration": {"x": -0.25, "y": -0.02, "z": 0.9}, "timestamp": 1742099259.0}, "sensor_id": "MPU6050_1", "timestamp": 1742099259.0}, {"payload": {"acceleration": {"x": -0.24, "y": 0.0, "z": 0.9}, "timestamp": 1742098168.0}, "sensor_id": "MPU6050_1", "timestamp": 1742098168.0}]'}
