@@ -1,100 +1,90 @@
 import streamlit as st
 import pandas as pd
-import requests
-import json
-import altair as alt
+import numpy as np
+import plotly.graph_objects as go
+from datetime import datetime, timedelta
 
-def fetch_data_from_api(api_url):
-    """Récupère les données depuis l'API Gateway et les transforme en JSON utilisable."""
-    try:
-        response = requests.get(api_url)
-        response.raise_for_status()  # Vérifie si l'API renvoie une erreur
+# --- Simulated Data Generation ---
+def generate_door_data(num_points=100):
+    time_index = pd.date_range(end=datetime.now(), periods=num_points, freq='1min')
+    open_close = np.random.choice([0, 1], size=num_points)  # 0: closed, 1: open
+    temperature = np.random.uniform(18, 25, size=num_points) + np.sin(np.linspace(0, 10, num_points)) * 2
+    accelerometer_x = np.random.normal(0, 0.1, size=num_points)
+    accelerometer_y = np.random.normal(0, 0.1, size=num_points)
+    accelerometer_z = np.random.normal(9.8, 0.1, size=num_points)  # Simulate gravity in z-axis
+    df = pd.DataFrame({
+        'time': time_index,
+        'open_close': open_close,
+        'temperature': temperature,
+        'acc_x': accelerometer_x,
+        'acc_y': accelerometer_y,
+        'acc_z': accelerometer_z,
+    })
+    return df
 
-        # Désérialiser le JSON correctement
-        data = response.json()
+data = generate_door_data()
 
-        # Vérifier si `body` est une string encodée et la convertir en JSON
-        if isinstance(data, dict) and "body" in data:
-            data = json.loads(data["body"])  # Convertir `body` en vrai JSON
+# --- Streamlit App ---
+st.set_page_config(page_title="Connected Door Dashboard", layout="wide")
 
-        return data
+st.title("Connected Door Dashboard")
 
-    except requests.exceptions.RequestException as e:
-        st.error(f"Erreur lors de la récupération des données: {e}")
-        return None
-    except json.JSONDecodeError:
-        st.error("Réponse JSON invalide depuis l'API.")
-        return None
+# --- Current State ---
+st.header("Current State")
+col1, col2 = st.columns(2)
 
-def display_timeseries_from_api(api_url):
-    """Affiche un graphique de séries temporelles des données de l'API."""
-    data = fetch_data_from_api(api_url)
+current_state = data.iloc[-1]
 
-    if data:
-        try:
-            # Vérifier que `data` est une liste
-            if isinstance(data, str):
-                data = json.loads(data)  # Conversion si encore sous forme de string
+# Temperature Gauge
+fig_gauge = go.Figure(go.Indicator(
+    domain = {'x': [0, 1], 'y': [0, 1]},
+    value = current_state['temperature'],
+    mode = "gauge+number",
+    title = {'text': "Temperature (°C)"},
+    gauge = {'axis': {'range': [min(data['temperature']), max(data['temperature'])]},
+             'bar': {'color': "darkblue"},
+             'steps' : [
+                 {'range': [min(data['temperature']), (min(data['temperature'])+max(data['temperature']))/2], 'color': "lightgray"},
+                 {'range': [(min(data['temperature'])+max(data['temperature']))/2, max(data['temperature'])], 'color': "gray"}]}))
 
-            if not isinstance(data, list):
-                st.error("⚠ Erreur : Les données ne sont pas sous forme de liste JSON.")
-                return
+col1.plotly_chart(fig_gauge, use_container_width=True)
 
-            # Préparation des données pour affichage
-            flattened_data = []
-            for item in data:
-                payload = item.get("payload", {})
-                acceleration = payload.get("acceleration", {})
-                timestamp = item.get("timestamp")
-                sensor_id = item.get("sensor_id", "Unknown")
+# Door Status (Conditional Formatting)
+if current_state['open_close'] == 1:
+    col2.markdown(f"<h2 style='color: red;'>Door: Open</h2>", unsafe_allow_html=True)
+else:
+    col2.markdown(f"<h2 style='color: green;'>Door: Closed</h2>", unsafe_allow_html=True)
 
-                if timestamp is not None:
-                    flattened_data.append({
-                        "timestamp": timestamp,
-                        "sensor_id": sensor_id,
-                        "x": acceleration.get("x"),
-                        "y": acceleration.get("y"),
-                        "z": acceleration.get("z"),
-                    })
-                    
-            df = pd.DataFrame(flattened_data)
-            df["timestamp"] = pd.to_datetime(df["timestamp"], unit="s")
-            df = df.set_index("timestamp")
+# --- Door Open/Close Timeline (Bar Chart) ---
+st.header("Door Open/Close Timeline")
 
-            # Convertir toutes les colonnes numériques en `float`
-            for col in ["x", "y", "z"]:
-                df[col] = pd.to_numeric(df[col], errors="coerce")
+fig_door_bar = go.Figure()
 
-            # Melt les colonnes pour affichage
-            df_melted = df.reset_index().melt("timestamp", var_name="variable", value_name="value")
+colors = ['green' if status == 0 else 'red' for status in data['open_close']]
 
-            # Affichage avec Altair
-            chart = alt.Chart(df_melted).mark_line().encode(
-                x="timestamp:T",
-                y="value:Q",
-                color="variable:N",
-                tooltip=["timestamp", "variable", "value"]
-            ).properties(
-                width=800,
-                height=400
-            )
+fig_door_bar.add_trace(go.Bar(x=data['time'], y=[1]*len(data), marker_color=colors, name='Door State'))
 
-            st.altair_chart(chart, use_container_width=True)
+fig_door_bar.update_layout(yaxis=dict(showticklabels=False, range=[0, 1.2]), xaxis_title="Time", yaxis_title="")
 
-        except Exception as e:
-            st.error(f"Une erreur est survenue : {e}")
-            
-def main():
-    st.title("📊 Dashboard Temps Réel - MPU6050")
-    
-    api_url = "https://xz0syz1fc6.execute-api.ca-central-1.amazonaws.com/prod/data"
+st.plotly_chart(fig_door_bar, use_container_width=True)
 
-    # Bouton pour rafraîchir les données
-    if st.button("🔄 Rafraîchir les données"):
-        display_timeseries_from_api(api_url)
+# --- Temperature Timeline ---
+st.header("Temperature Timeline")
 
-    # Chargement initial des données
-    display_timeseries_from_api(api_url)
+fig_temp = go.Figure()
+fig_temp.add_trace(go.Scatter(x=data['time'], y=data['temperature'], mode='lines', name='Temperature',
+                             line=dict(color='red')))
+fig_temp.update_layout(xaxis_title="Time", yaxis_title="Temperature (°C)")
+st.plotly_chart(fig_temp, use_container_width=True)
 
-if __name__ == "__main__":
-    main()
+# --- Stats Page (Raw Sensor Data) ---
+st.header("Sensor Data")
+
+if st.checkbox("Show Raw Sensor Data"):
+    st.subheader("Accelerometer Data")
+    st.line_chart(data[['time','acc_x', 'acc_y', 'acc_z']].set_index('time'))
+
+    st.subheader("Temperature Data")
+    st.line_chart(data[['time','temperature']].set_index('time'))
+    st.subheader("Raw sensor data table")
+    st.dataframe(data)
