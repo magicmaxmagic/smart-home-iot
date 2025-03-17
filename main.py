@@ -10,15 +10,12 @@ def fetch_data_from_api(api_url):
         response = requests.get(api_url)
         response.raise_for_status()  # Vérifie si l'API renvoie une erreur
 
-        # 🔹 Désérialiser le JSON correctement
+        # Désérialiser le JSON correctement
         data = response.json()
 
-        # ✅ Vérifier si `body` est une string encodée et la convertir en JSON
+        # Vérifier si `body` est une string encodée et la convertir en JSON
         if isinstance(data, dict) and "body" in data:
             data = json.loads(data["body"])  # Convertir `body` en vrai JSON
-
-        # Debug: afficher la réponse après transformation
-        st.write("✅ Données transformées :", data)
 
         return data
 
@@ -35,9 +32,6 @@ def display_timeseries_from_api(api_url):
 
     if data:
         try:
-            # Debugging: afficher les données brutes reçues
-            st.write("🔍 Données après conversion :", data)
-
             # Vérifier que `data` est une liste
             if isinstance(data, str):
                 data = json.loads(data)  # Conversion si encore sous forme de string
@@ -45,12 +39,6 @@ def display_timeseries_from_api(api_url):
             if not isinstance(data, list):
                 st.error("⚠ Erreur : Les données ne sont pas sous forme de liste JSON.")
                 return
-
-            # Vérifier si `timestamp` est bien présent dans chaque élément
-            for item in data:
-                if "timestamp" not in item:
-                    st.error(f"⚠ Erreur : 'timestamp' absent dans {item}")
-                    return
 
             # Préparation des données pour affichage
             flattened_data = []
@@ -68,11 +56,14 @@ def display_timeseries_from_api(api_url):
                         "y": acceleration.get("y"),
                         "z": acceleration.get("z"),
                     })
-
-            # Convertir en DataFrame
+                    
             df = pd.DataFrame(flattened_data)
             df["timestamp"] = pd.to_datetime(df["timestamp"], unit="s")
             df = df.set_index("timestamp")
+
+            # Convertir toutes les colonnes numériques en `float`
+            for col in ["x", "y", "z"]:
+                df[col] = pd.to_numeric(df[col], errors="coerce")
 
             # Melt les colonnes pour affichage
             df_melted = df.reset_index().melt("timestamp", var_name="variable", value_name="value")
