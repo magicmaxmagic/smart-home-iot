@@ -3,7 +3,7 @@ import json
 from decimal import Decimal
 import time
 
-TIME_WINDOW = 999999  # ➤ Étendre la plage pour tester
+TIME_WINDOW = 14 * 24 * 60 * 60  # ➤ Étendre la plage pour tester
 TIME_REFERENCE = -1  # ➤ Timestamp trop ancien # ➤ Donne une vraie valeur correspondant à un timestamp de tes données
 SENSORS_ID = ["mpu6050_sensor", "alarme_system"]
 

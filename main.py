@@ -1,6 +1,8 @@
 import streamlit as st
 import plotly.graph_objects as go
 from data import get_accelerator_data, get_alarm_data
+from datetime import datetime
+
 
 # --- Charger les données ---
 data = get_accelerator_data()
@@ -60,3 +62,22 @@ if alarms is not None and not alarms.empty:
         st.plotly_chart(fig_intrusion, use_container_width=True)
     else:
         st.info("Aucune intrusion détectée.")
+        
+# --- Sélection de la plage temporelle ---
+st.subheader("Filtrer par période temporelle")
+
+min_time = data.index.min().to_pydatetime()
+max_time = data.index.max().to_pydatetime()
+
+time_range = st.slider(
+    "Sélectionnez la plage de temps :",
+    min_value=min_time,
+    max_value=max_time,
+    value=(min_time, max_time),
+    format="YYYY-MM-DD HH:mm"
+)
+
+# ✅ Filtrer les données selon la plage choisie
+data = data.loc[time_range[0]:time_range[1]]
+if alarms is not None and not alarms.empty:
+    alarms = alarms.loc[time_range[0]:time_range[1]]

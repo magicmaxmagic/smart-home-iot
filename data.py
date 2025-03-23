@@ -8,7 +8,7 @@ load_dotenv()
 URL_BASE = os.getenv("URL_BASE")
 ACCELERATOR_URL = f"{URL_BASE}/data"
 ALARM_URL = f"{URL_BASE}/alarm"
-SENSOR_IDS = ["mpu6050_sensor"]
+SENSOR_IDS = ["mpu6050_sensor", "alarme_system"]
 
 def get_accelerator_data():
     try:
