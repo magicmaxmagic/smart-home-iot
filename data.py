@@ -7,69 +7,73 @@ import os
 load_dotenv()
 URL_BASE = os.getenv("URL_BASE")
 ACCELERATOR_URL = f"{URL_BASE}/data"
-TEMPERATURE_URL = f"{URL_BASE}/temp"
-SENSOR_IDS = ["MPU6050_1", " _id"]
-
+ALARM_URL = f"{URL_BASE}/alarm"
+SENSOR_IDS = ["mpu6050_sensor"]
 
 def get_accelerator_data():
-    """
-    Récupère les données depuis l'API Gateway et les transforme en JSON utilisable.
-    """
-    response = requests.post(
-        ACCELERATOR_URL,
-        headers={"x-api-key": os.getenv("API_KEY")},
-        data=json.dumps({"sensor_ids": SENSOR_IDS}),
-    )
-    print(response.request.url)
-    response.raise_for_status()  # Vérifie si l'API renvoie une erreur
-    data = response.json()
-    # data = {'statusCode': 200, 'body': '[{"payload": {"acceleration": {"x": -0.24, "y": 0.0, "z": 0.9}, "timestamp": 1742096823.0}, "sensor_id": "MPU6050_1", "timestamp": 1742096823.0}, {"payload": {"acceleration": {"x": -0.25, "y": -0.01, "z": 0.91}, "timestamp": 1742097401.0}, "sensor_id": "MPU6050_1", "timestamp": 1742097401.0}, {"payload": {"acceleration": {"x": -0.25, "y": -0.02, "z": 0.9}, "timestamp": 1742099259.0}, "sensor_id": "MPU6050_1", "timestamp": 1742099259.0}, {"payload": {"acceleration": {"x": -0.24, "y": 0.0, "z": 0.9}, "timestamp": 1742098168.0}, "sensor_id": "MPU6050_1", "timestamp": 1742098168.0}]'}
+    try:
+        response = requests.post(
+            ACCELERATOR_URL,
+            headers={"x-api-key": os.getenv("API_KEY")},
+            data=json.dumps({"sensor_ids": SENSOR_IDS})
+        )
+        response.raise_for_status()
+        data = response.json()
+        print("[DEBUG] Contenu brut reçu:", data)
 
-    # Vérifier si `body` est une string encodée et la convertir en JSON
-    if isinstance(data, dict) and "body" in data:
-        data = json.loads(data["body"])
+        if isinstance(data, dict) and "body" in data:
+            data = json.loads(data["body"])
 
-    if data:
-        if isinstance(data, str):
-            data = json.loads(data)  # Conversion si encore sous forme de string
-
-        if not isinstance(data, list):
-            return
-        # Préparation des données pour affichage
-        flattened_data = []
+        parsed = []
         for item in data:
             payload = item.get("payload", {})
-            acceleration = payload.get("acceleration", {})
             timestamp = item.get("timestamp")
-            sensor_id = item.get("sensor_id", "Unknown")
 
-            if timestamp is not None:
-                flattened_data.append(
-                    {
-                        "timestamp": timestamp,
-                        "sensor_id": sensor_id,
-                        "x": acceleration.get("x"),
-                        "y": acceleration.get("y"),
-                        "z": acceleration.get("z"),
-                    }
-                )
+            parsed.append({
+                "timestamp": pd.to_datetime(timestamp, unit="s"),
+                "x": float(payload.get("accel_x", 0)),
+                "y": float(payload.get("accel_y", 0)),
+                "z": float(payload.get("accel_z", 0)),
+                "door_state": payload.get("door_state", "unknown"),
+                "people_count": int(payload.get("people_count", 0))
+            })
 
-        df = pd.DataFrame(flattened_data)
-        df["timestamp"] = pd.to_datetime(df["timestamp"], unit="s")
-        df = df.set_index("timestamp")
+        df = pd.DataFrame(parsed)
+        df = df.set_index("timestamp").sort_index()
+        return df
 
-        # Convertir toutes les colonnes numériques en `float`
-        for col in ["x", "y", "z"]:
-            df[col] = pd.to_numeric(df[col], errors="coerce")
+    except Exception as e:
+        print(f"[ERREUR] get_accelerator_data: {e}")
+        return None
 
-        # Melt les colonnes pour affichage
-        # df_melted = df.reset_index().melt("timestamp", var_name="variable", value_name="value")
+def get_alarm_data():
+    try:
+        response = requests.post(
+            ALARM_URL,
+            headers={"x-api-key": os.getenv("API_KEY")},
+            data=json.dumps({})
+        )
+        response.raise_for_status()
+        data = response.json()
 
-    return df
+        if isinstance(data, dict) and "body" in data:
+            data = json.loads(data["body"])
 
+        parsed = []
+        for item in data:
+            payload = item.get("payload", {})
+            timestamp = item.get("timestamp")
 
-def get_temp_data(): ...
+            parsed.append({
+                "timestamp": pd.to_datetime(timestamp, unit="s"),
+                "alarm_state": payload.get("alarm_state", "unknown"),
+                "user": payload.get("user", "unknown"),
+            })
 
+        df = pd.DataFrame(parsed)
+        df = df.set_index("timestamp").sort_index()
+        return df
 
-if __name__ == "__main__":
-    print(get_accelerator_data())
+    except Exception as e:
+        print(f"[ERREUR] get_alarm_data: {e}")
+        return None

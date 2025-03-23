@@ -1,90 +1,62 @@
 import streamlit as st
-import pandas as pd
-import numpy as np
 import plotly.graph_objects as go
-from datetime import datetime, timedelta
+from data import get_accelerator_data, get_alarm_data
 
-# --- Simulated Data Generation ---
-def generate_door_data(num_points=100):
-    time_index = pd.date_range(end=datetime.now(), periods=num_points, freq='1min')
-    open_close = np.random.choice([0, 1], size=num_points)  # 0: closed, 1: open
-    temperature = np.random.uniform(18, 25, size=num_points) + np.sin(np.linspace(0, 10, num_points)) * 2
-    accelerometer_x = np.random.normal(0, 0.1, size=num_points)
-    accelerometer_y = np.random.normal(0, 0.1, size=num_points)
-    accelerometer_z = np.random.normal(9.8, 0.1, size=num_points)  # Simulate gravity in z-axis
-    df = pd.DataFrame({
-        'time': time_index,
-        'open_close': open_close,
-        'temperature': temperature,
-        'acc_x': accelerometer_x,
-        'acc_y': accelerometer_y,
-        'acc_z': accelerometer_z,
-    })
-    return df
+# --- Charger les données ---
+data = get_accelerator_data()
+print(data)  # ← Ajoute ceci pour déboguer
+alarms = get_alarm_data()
 
-data = generate_door_data()
-
-# --- Streamlit App ---
 st.set_page_config(page_title="Connected Door Dashboard", layout="wide")
-
 st.title("Connected Door Dashboard")
 
-# --- Current State ---
+if data is None or data.empty:
+    st.error("Aucune donnée capteur disponible.")
+    st.stop()
+
+if alarms is None or alarms.empty:
+    st.warning("Aucune donnée d'alarme disponible.")
+
+# --- État actuel ---
 st.header("Current State")
 col1, col2 = st.columns(2)
 
 current_state = data.iloc[-1]
+door_open = current_state['z'] > 0.5
+door_state_text = "Open" if door_open else "Closed"
+door_state_color = "red" if door_open else "green"
 
-# Temperature Gauge
-fig_gauge = go.Figure(go.Indicator(
-    domain = {'x': [0, 1], 'y': [0, 1]},
-    value = current_state['temperature'],
-    mode = "gauge+number",
-    title = {'text': "Temperature (°C)"},
-    gauge = {'axis': {'range': [min(data['temperature']), max(data['temperature'])]},
-             'bar': {'color': "darkblue"},
-             'steps' : [
-                 {'range': [min(data['temperature']), (min(data['temperature'])+max(data['temperature']))/2], 'color': "lightgray"},
-                 {'range': [(min(data['temperature'])+max(data['temperature']))/2, max(data['temperature'])], 'color': "gray"}]}))
+col2.markdown(f"<h2 style='color: {door_state_color};'>Door: {door_state_text}</h2>", unsafe_allow_html=True)
+col1.metric("People in", value=current_state["people_count"])
 
-col1.plotly_chart(fig_gauge, use_container_width=True)
-
-# Door Status (Conditional Formatting)
-if current_state['open_close'] == 1:
-    col2.markdown(f"<h2 style='color: red;'>Door: Open</h2>", unsafe_allow_html=True)
-else:
-    col2.markdown(f"<h2 style='color: green;'>Door: Closed</h2>", unsafe_allow_html=True)
-
-# --- Door Open/Close Timeline (Bar Chart) ---
+# --- Timeline porte ---
 st.header("Door Open/Close Timeline")
+colors = ['green' if z <= 0.5 else 'red' for z in data['z']]
+fig_door = go.Figure(go.Bar(x=data.index, y=[1]*len(data), marker_color=colors))
+fig_door.update_layout(yaxis=dict(showticklabels=False, range=[0, 1.2]), xaxis_title="Time")
+st.plotly_chart(fig_door, use_container_width=True)
 
-fig_door_bar = go.Figure()
+# --- Données accéléromètre ---
+st.header("Accelerometer Data")
+st.line_chart(data[['x', 'y', 'z']])
 
-colors = ['green' if status == 0 else 'red' for status in data['open_close']]
+# --- Données d’alarme ---
+if alarms is not None and not alarms.empty:
+    st.header("Alarm Events")
 
-fig_door_bar.add_trace(go.Bar(x=data['time'], y=[1]*len(data), marker_color=colors, name='Door State'))
+    st.dataframe(alarms)
 
-fig_door_bar.update_layout(yaxis=dict(showticklabels=False, range=[0, 1.2]), xaxis_title="Time", yaxis_title="")
-
-st.plotly_chart(fig_door_bar, use_container_width=True)
-
-# --- Temperature Timeline ---
-st.header("Temperature Timeline")
-
-fig_temp = go.Figure()
-fig_temp.add_trace(go.Scatter(x=data['time'], y=data['temperature'], mode='lines', name='Temperature',
-                             line=dict(color='red')))
-fig_temp.update_layout(xaxis_title="Time", yaxis_title="Temperature (°C)")
-st.plotly_chart(fig_temp, use_container_width=True)
-
-# --- Stats Page (Raw Sensor Data) ---
-st.header("Sensor Data")
-
-if st.checkbox("Show Raw Sensor Data"):
-    st.subheader("Accelerometer Data")
-    st.line_chart(data[['time','acc_x', 'acc_y', 'acc_z']].set_index('time'))
-
-    st.subheader("Temperature Data")
-    st.line_chart(data[['time','temperature']].set_index('time'))
-    st.subheader("Raw sensor data table")
-    st.dataframe(data)
+    st.subheader("Intrusion Timeline")
+    intrusion_data = alarms[alarms['alarm_state'] == 'INTRUSION']
+    if not intrusion_data.empty:
+        fig_intrusion = go.Figure(go.Scatter(
+            x=intrusion_data.index,
+            y=[1]*len(intrusion_data),
+            mode='markers',
+            marker=dict(size=10, color='red'),
+            name="INTRUSION"
+        ))
+        fig_intrusion.update_layout(yaxis=dict(showticklabels=False), xaxis_title="Time")
+        st.plotly_chart(fig_intrusion, use_container_width=True)
+    else:
+        st.info("Aucune intrusion détectée.")
