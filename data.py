@@ -62,12 +62,12 @@ def get_alarm_data():
         parsed = []
         for item in data:
             payload = item.get("payload", {})
-            timestamp = item.get("timestamp")
+            timestamp = item.get("timestamp")  # timestamp est en racine
 
             parsed.append({
                 "timestamp": pd.to_datetime(timestamp, unit="s"),
                 "alarm_state": payload.get("alarm_state", "unknown"),
-                "user": payload.get("user", "unknown"),
+                "user": payload.get("user", "unknown")
             })
 
         df = pd.DataFrame(parsed)
