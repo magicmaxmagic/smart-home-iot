@@ -48,10 +48,9 @@ def get_accelerator_data():
 
 def get_alarm_data():
     try:
-        response = requests.post(
+        response = requests.get(
             ALARM_URL,
-            headers={"x-api-key": os.getenv("API_KEY")},
-            data=json.dumps({})
+            headers={"x-api-key": os.getenv("API_KEY")}
         )
         response.raise_for_status()
         data = response.json()
