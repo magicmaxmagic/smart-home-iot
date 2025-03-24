@@ -33,7 +33,7 @@ col1.metric("People in", value=current_state["people_count"])
 
 # --- Timeline porte ---
 st.header("Door Open/Close Timeline")
-colors = ['green' if z <= 0.5 else 'red' for z in data['z']]
+colors = ['gray' if z == "none" else 'red' if z == 'closed' else 'green' for z in data['door_state']]
 fig_door = go.Figure(go.Bar(x=data.index, y=[1]*len(data), marker_color=colors))
 fig_door.update_layout(yaxis=dict(showticklabels=False, range=[0, 1.2]), xaxis_title="Time")
 st.plotly_chart(fig_door, use_container_width=True)
@@ -45,7 +45,7 @@ st.line_chart(data[['x', 'y', 'z']])
 # --- Données d’alarme ---
 if alarms is not None and not alarms.empty:
     st.header("Alarm Events")
-
+    print("[ALARMS DATAFRAME]", alarms)
     st.dataframe(alarms)
 
     st.subheader("Intrusion Timeline")
